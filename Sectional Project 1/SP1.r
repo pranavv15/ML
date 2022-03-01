@@ -80,6 +80,9 @@ mse
 rss <- sum(residuals(multi.model.full)^2)
 rss
 
+# Variance of the predictions of multiple linear model=60.3
+v <- var(multi.model.predictions)
+
 par(mfrow=c(2,2))
 plot(multi.model.full)
 
@@ -146,6 +149,8 @@ print(paste('SSE:', sum(((ridge.pred - median_income)^2))))
 print(paste('SST:', sum(((median_income - mean(median_income))^2))))
 print(paste('R^2:', 1 - sum(((ridge.pred - median_income)^2))/sum(((median_income - mean(median_income))^2))))
 
+# variance of ridge regression model = 45.1
+v2 <- var(ridge.pred)
 
 #library(caret)
 #plot(varImp(ridge.final,lambda = 2.73615, scale=F))
@@ -189,25 +194,8 @@ print(paste('SSE:', sum(((lasso.pred - median_income)^2))))
 print(paste('SST:', sum(((median_income - mean(median_income))^2))))
 print(paste('R^2:', 1 - sum(((lasso.pred - median_income)^2))/sum(((median_income - mean(median_income))^2))))
 
-
-
-
-#-------------------------------------------------------------------------------------------------------------------------------
-# 4. Summary Table
-
+# variance of lasso model = 54.8
+v3 <- var(lasso.pred)
 
 
 #-------------------------------------------------------------------------------------------------------------------------------
-# 5. Description of Cross Validation algorithm(CV)
-
-
-
-
-#---------------------------------------------------------------------------------------------------------------------------------
-# 6. References and citations
-
-
-
-
-
-
