@@ -39,14 +39,14 @@ plot(credit$AGE,credit$LIMIT_BAL)
 set.seed(490)
 
 # split into training and testing
-credit.split <- sample(1:nrow(credit), size = nrow(credit)*0.8)
+credit.split <- sample(1:nrow(credit), size = nrow(credit)*0.7)
 train_set <- credit[credit.split,]
 test_set <- credit[-credit.split,]
 
 #class.cart <- rpart(formula = AHD ~ ., data = heart.train, method = "class", control = rpart.control(minbucket = 2, xval = 10))
 #prp(class.cart, roundint = FALSE)
 
-class.cart2 <- rpart(formula = DEFAULT ~ LIMIT_BAL+AGE, data = train_set, method = "class", control = rpart.control(minbucket = 2, xval = 10))
+class.cart2 <- rpart(formula = DEFAULT ~ ., data = train_set, method = "class", control = rpart.control(minbucket = 1,minsplit = 2, xval = 10, cp = 0.001))
 prp(class.cart2, roundint = FALSE)
 
 cp.class.param <- class.cart2$cptable
