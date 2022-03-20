@@ -124,8 +124,11 @@ ppv
 npv <- cftable[4]/(cftable[2] + cftable[4])
 npv
 
-test.prob = predict(prune.class.trees, newdata = test_set, type = "class")
+test.prob <- predict(prune.class.trees, newdata = test_set, type = "class")
 str(test.prob)
+table(test.prob)
+summary(test_set)
+
 test.prob <- as.numeric(test.prob)
 test.roc = roc(test_set$DEFAULT, test.prob)
 plot.roc(test.roc, col=par("fg"),plot=TRUE,print.auc = FALSE, legacy.axes = TRUE, asp =NA)
@@ -147,4 +150,5 @@ nrow(predict(class.cart2))
 perf1 <- performance(pred1,"tpr","fpr")
 plot(perf1, main="ROC Curve")
 
+# find out number of defaulters and non defaulters
 
