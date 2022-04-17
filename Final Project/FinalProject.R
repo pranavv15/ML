@@ -182,6 +182,119 @@ hc <- highchart() %>%
   hc_subtitle(text = "Help Needed by Countries ")
 hc
 
+###############################################################################################
+
+# Hierarchical clustering with 5 PC
+
+# Using the new clusters are our new data
+new_data <- pc[["x"]]
+new_data <- new_data[,-c(6,7,8,9)]
+new_data <- new_data*100
+
+new_data <- as.data.frame(new_data)
+new_data2 <- scale(new_data)
+
+
+# define linkage methods to use
+linkage <- c( "average", "single", "complete", "ward")
+names(linkage) <- c( "average", "single", "complete", "ward")
+
+# agnes: Compute agglomerative hierarchical clustering of the dataset
+ac <- function(x) {
+  agnes(new_data2, method = x)$ac
+}
+# calculate agglomerative coefficient for each clustering linkage method
+sapply(linkage, ac)
+
+# While all have similar scores, Ward performs the best
+
+# Dendrogram
+clust <- agnes(new_data2, method = "ward")
+pltree(clust, cex = 0.6, hang = -1, main = "Dendrogram")
+
+#calculate gap statistic for each number of clusters (up to 10 clusters)
+gap_stat <- clusGap(new_data2, FUN = hcut, nstart = 25, K.max = 10, B = 50)
+gap_stat
+
+#produce plot of gap statistic vs. number of clusters 
+fviz_gap_stat(
+  gap_stat,
+  linecolor = "red",
+  maxSE = list(method = "firstSEmax", SE.factor = 0)
+)
+
+# Optimal number of clusters unclear because gap stat keeps on increasing, recommends 1
+# But we will choose 3
+
+#compute distance matrix
+d <- dist(new_data2, method = "euclidean")
+
+# perform hierarchical clustering using Ward's method
+final_clust <- hclust(d, method = "ward.D2" )
+
+# cut the dendrogram into 4 clusters based on the Gap Statistic
+clusters <- cutree(final_clust, k=3)
+
+# find number of observations in each cluster
+table(clusters)
+
+# append cluster labels to original data
+data3 <- new_data
+final_data3 <- cbind(new_data, cluster = clusters)
+final_data3 <- as.data.frame(final_data3)
+
+# display first 20 rows of final data
+head(final_data3, 20)
+
+# find mean values for each cluster
+aggregate(final_data3, by=list(cluster=final_data3$cluster), mean)
+
+# Silhouette Analysis
+cl <- hclust(as.dist(d,diag = TRUE, upper = TRUE), method= 'ward')
+sil_cl <- silhouette(clusters ,as.dist(d), title=title(main = 'Good'))
+
+rownames(sil_cl) <- rownames(d)
+
+plot(sil_cl)
+
+# Make country column
+final_data3$Country <- rownames(final_data3)
+final_data3['United States', "Country"] <- "United States of America"
+final_data3 <- as.data.frame(final_data3)
+
+
+# 
+# ## Silhouette Analysis
+# d <- dist(new_data2, method = "euclidean") # Calculate distance matrix
+# sils <- list()
+# avg.sil <- numeric(9)
+# for(i in 1:9){
+#   output <- silhouette(final_data3$cluster, d)
+#   # average the scores
+#   sils[[i]] <- output
+#   avg.sil[i] <- mean(outßput[,3])
+# }
+# # Obtain the silhouette scores for 3 and 4 clusters
+# sil3 <- sils[[2]]
+# sil4 <- sils[[3]]
+# 
+# # Plot the scores for each observation
+# plot(sil4, main="Silhouette Plot: Hierarchical, 4 Clusters", col=1:3, border=NA)
+
+
+# Geospatial Plot of clusters
+library(highcharter)
+
+hc <- highchart() %>%
+  hc_add_series_map(
+    worldgeojson, final_data3, value = "cluster", joinBy = c('name','Country'),
+    name = "Help"
+  )  %>% 
+  hc_colorAxis(stops = color_stops()) %>% 
+  hc_title(text = "World Map") %>% 
+  hc_subtitle(text = "Help Needed by Countries ")
+hc
+
 ################################################################################################
 
 # Hierarchical clustering with original data
