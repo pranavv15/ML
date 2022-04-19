@@ -4,9 +4,11 @@ library(DataExplorer)
 library(purrr)
 library(cluster)    # clustering algorithms
 library(factoextra)
+library(tibble)
 
 # Read the data file
 data <- read.csv(file.choose(), header = T)
+data['160', "country"] <- "United States of America"
 
 # Data exploration
 introduce(data)
@@ -17,8 +19,9 @@ summary(data)
 rownames(data) <- data[,1]
 data[,1] <- NULL
 
-data_scaled <- scale(data)
 
+data_scaled <- scale(data)
+par(mfrow=c(1,1))
 #################################################################################################
 
 # PCA 
@@ -53,14 +56,14 @@ axis(1, at=c(1,2,3,4), labels=c(1,2,3,4), pos=c(-0.05,1))
 
 
 cum_pve <- numeric(length(pve))
-cum_pve[1] <- pve[1]l
+cum_pve[1] <- pve[1]
 for (i in 2:length(cum_pve)){
   cum_pve[i] <- pve[i] + cum_pve[i-1]
 }
 cum_pve
 
-plot(cum_pve, type="b", pch=19, xlab="Combined Principal Components", ylab="Cumulative PVE", xaxt="n", ylim=c(0,1))
-axis(1, at=c(1,2,3,4), labels=c(1,2,3,4), pos=c(-0.05,1))
+plot(cum_pve, type="b", pch=19, xlab="Combined Principal Components", ylab="Cumulative PVE", xaxt="n", ylim=c(0,1), main = "Proportion of Variance Explained")
+axis(1, at=c(1,2,3,4,5,6,7,8,9), labels=c(1,2,3,4,5,6,7,8,9), pos=c(-0.05,1))
 
 # Looks like there are 4 PC's that we need to take into account
 # Next job is to find the PC scores for each country and then create the new data table cluster
@@ -69,16 +72,120 @@ axis(1, at=c(1,2,3,4), labels=c(1,2,3,4), pos=c(-0.05,1))
 # PC2 puts most weight on exports and imports
 # PC3 puts most weights on inflation
 # PC4 puts most weight on health
+par(mfrow=c(1,1))
 
 ####################################################################################################
 
-# Hierarchical clustering
+# Hierarchical Clustering with 3 PC
+
+# Using the new clusters are our new data
+new_data <- pc[["x"]]
+new_data <- new_data[,-c(4,5,6,7,8,9)]
+new_data <- new_data*100
+
+new_data <- as.data.frame(new_data)
+new_data2 <- scale(new_data)
+
+# define linkage methods to use
+linkage <- c( "average", "single", "complete", "ward")
+names(linkage) <- c( "average", "single", "complete", "ward")
+
+# agnes: Compute agglomerative hierarchical clustering of the dataset
+ac <- function(x) {
+  agnes(new_data2, method = x)$ac
+}
+# calculate agglomerative coefficient for each clustering linkage method
+sapply(linkage, ac)
+
+# While all have similar scores, Ward performs the best
+
+# Dendrogram
+clust <- agnes(new_data2, method = "ward")
+pltree(clust, cex = 0.6, hang = -1, main = "Dendrogram")
+
+#calculate gap statistic for each number of clusters (up to 10 clusters)
+gap_stat <- clusGap(new_data2, FUN = hcut, nstart = 25, K.max = 10, B = 50)
+gap_stat
+
+#produce plot of gap statistic vs. number of clusters 
+fviz_gap_stat(
+  gap_stat,
+  linecolor = "red",
+  maxSE = list(method = "firstSEmax", SE.factor = 0)
+)
+
+# Optimal number of clusters unclear because gap stat keeps on increasing, recommends 1
+# But we will choose 3
+
+#compute distance matrix
+d <- dist(new_data2, method = "euclidean")
+
+# perform hierarchical clustering using Ward's method
+final_clust <- hclust(d, method = "ward.D2" )
+
+# cut the dendrogram into 4 clusters based on the Gap Statistic
+clusters <- cutree(final_clust, k=3)
+
+# find number of observations in each cluster
+table(clusters)
+
+# append cluster labels to original data
+final_data3 <- cbind(new_data, cluster = clusters)
+final_data3 <- as.data.frame(final_data3)
+
+# Multiple conditions when adding new column to dataframe:
+final_data3 <- final_data3 %>% mutate(cluster =
+                     case_when(cluster == 1 ~ 1, 
+                               cluster == 2 ~ 3,
+                               cluster == 3 ~ 2)
+)
+
+
+
+# display first 20 rows of final data
+head(final_data3, 20)
+str(final_data3)
+
+# find mean values for each cluster
+aggregate(final_data3, by=list(cluster=final_data3$cluster), mean)
+
+# Silhouette Analysis
+cl <- hclust(as.dist(d,diag = TRUE, upper = TRUE), method= 'ward')
+sil_cl <- silhouette(clusters ,as.dist(d), title=title(main = 'Good'))
+
+rownames(sil_cl) <- rownames(d)
+
+plot(sil_cl)
+
+# Make country column
+final_data3$Country <- rownames(final_data3)
+colnames(final_data3) <-(c("Birth Rate","Trade","Inflation","cluster","Country"))
+final_data3 <- as.data.frame(final_data3)
+
+# Geospatial Plot of clusters
+library(highcharter)
+
+hc <- highchart() %>%
+  hc_add_series_map(
+    worldgeojson, final_data3, value = "cluster", joinBy = c('name','Country'),
+    name = "Help"
+  )  %>% 
+  hc_colorAxis(stops = color_stops()) %>% 
+  hc_title(text = "World Map for 3 PC") %>% 
+  hc_subtitle(text = "Yellow = No Risk, Blue = High Risk, Green = Medium Risk ")
+
+  
+hc
+
+#################################################################################################
+
+#  Hierarchical Clustering With 4 PC
 
 # Using the new clusters are our new data
 new_data <- pc[["x"]]
 new_data <- new_data[,-c(5,6,7,8,9)]
 new_data <- new_data*100
-
+colnames(new_data) <- c("Birth rate","Trade","Inflation","Economy")
 new_data <- as.data.frame(new_data)
 new_data2 <- scale(new_data)
 
@@ -130,6 +237,13 @@ data3 <- new_data
 final_data3 <- cbind(new_data, cluster = clusters)
 final_data3 <- as.data.frame(final_data3)
 
+# Multiple conditions when adding new column to dataframe:
+final_data3 <- final_data3 %>% mutate(cluster =
+                                        case_when(cluster == 1 ~ 1, 
+                                                  cluster == 2 ~ 3,
+                                                  cluster == 3 ~ 2,
+                                                  cluster == 4 ~ 4)
+)
 # display first 20 rows of final data
 head(final_data3, 20)
 
@@ -146,28 +260,8 @@ plot(sil_cl)
 
 # Make country column
 final_data3$Country <- rownames(final_data3)
-final_data3['United States', "Country"] <- "United States of America"
+
 final_data3 <- as.data.frame(final_data3)
-
-
-# 
-# ## Silhouette Analysis
-# d <- dist(new_data2, method = "euclidean") # Calculate distance matrix
-# sils <- list()
-# avg.sil <- numeric(9)
-# for(i in 1:9){
-#   output <- silhouette(final_data3$cluster, d)
-#   # average the scores
-#   sils[[i]] <- output
-#   avg.sil[i] <- mean(outßput[,3])
-# }
-# # Obtain the silhouette scores for 3 and 4 clusters
-# sil3 <- sils[[2]]
-# sil4 <- sils[[3]]
-# 
-# # Plot the scores for each observation
-# plot(sil4, main="Silhouette Plot: Hierarchical, 4 Clusters", col=1:3, border=NA)
-
 
 # Geospatial Plot of clusters
 library(highcharter)
@@ -178,8 +272,8 @@ hc <- highchart() %>%
     name = "Help"
   )  %>% 
   hc_colorAxis(stops = color_stops()) %>% 
-  hc_title(text = "World Map") %>% 
-  hc_subtitle(text = "Help Needed by Countries ")
+  hc_title(text = "World Map with 4 PC") %>% 
+  hc_subtitle(text = "Yellow = No Risk, Blue = High Risk, Green = Medium Risk ")
 hc
 
 ###############################################################################################
@@ -189,11 +283,12 @@ hc
 # Using the new clusters are our new data
 new_data <- pc[["x"]]
 new_data <- new_data[,-c(6,7,8,9)]
+colnames(new_data) <- c("Birth rate","Trade","Inflation","Economy","Inflation2")
+
 new_data <- new_data*100
 
 new_data <- as.data.frame(new_data)
 new_data2 <- scale(new_data)
-
 
 # define linkage methods to use
 linkage <- c( "average", "single", "complete", "ward")
@@ -239,12 +334,12 @@ clusters <- cutree(final_clust, k=3)
 table(clusters)
 
 # append cluster labels to original data
-data3 <- new_data
 final_data3 <- cbind(new_data, cluster = clusters)
 final_data3 <- as.data.frame(final_data3)
 
 # display first 20 rows of final data
 head(final_data3, 20)
+final_data3 <- final_data3[-168,]
 
 # find mean values for each cluster
 aggregate(final_data3, by=list(cluster=final_data3$cluster), mean)
@@ -259,28 +354,7 @@ plot(sil_cl)
 
 # Make country column
 final_data3$Country <- rownames(final_data3)
-final_data3['United States', "Country"] <- "United States of America"
 final_data3 <- as.data.frame(final_data3)
-
-
-# 
-# ## Silhouette Analysis
-# d <- dist(new_data2, method = "euclidean") # Calculate distance matrix
-# sils <- list()
-# avg.sil <- numeric(9)
-# for(i in 1:9){
-#   output <- silhouette(final_data3$cluster, d)
-#   # average the scores
-#   sils[[i]] <- output
-#   avg.sil[i] <- mean(outßput[,3])
-# }
-# # Obtain the silhouette scores for 3 and 4 clusters
-# sil3 <- sils[[2]]
-# sil4 <- sils[[3]]
-# 
-# # Plot the scores for each observation
-# plot(sil4, main="Silhouette Plot: Hierarchical, 4 Clusters", col=1:3, border=NA)
-
 
 # Geospatial Plot of clusters
 library(highcharter)
@@ -291,8 +365,8 @@ hc <- highchart() %>%
     name = "Help"
   )  %>% 
   hc_colorAxis(stops = color_stops()) %>% 
-  hc_title(text = "World Map") %>% 
-  hc_subtitle(text = "Help Needed by Countries ")
+  hc_title(text = "World Map for 5 PC") %>% 
+  hc_subtitle(text = "Yellow = No Risk, Blue = High Risk, Green = Medium Risk ")
 hc
 
 ################################################################################################
@@ -363,23 +437,6 @@ head(final_data2, 20)
 
 # Make country column
 final_data2$Country <- rownames(final_data2)
-final_data2['United States', "Country"] <- "United States of America"
-
-
-# ## Silhouette Analysis
-# d <- dist(data_scaled, method = "euclidean") # Calculate distance matrix
-# sils <- list()
-# avg.sil <- numeric(9)
-# for(i in 1:9){
-#   output <- silhouette(fin[[i]]$cluster, d)
-#   # average the scores
-#   sils[[i]] <- output
-#   avg.sil[i] <- mean(output[,3])
-# }
-# # Obtain the silhouette scores for 3 and 4 clusters
-# sil3 <- sils[[2]]
-# sil4 <- sils[[3]]
-
 
 # Geospatial Plot of clusters
 library(highcharter)
@@ -391,7 +448,7 @@ hc <- highchart() %>%
   )  %>% 
   hc_colorAxis(stops = color_stops()) %>% 
   hc_title(text = "World Map") %>% 
-  hc_subtitle(text = "Help Needed by Countries ")
+  hc_subtitle(text = "Yellow = No Risk, Blue = High Risk, Green = Medium Risk ")
 hc
 
 par(mfrow = c(1,1))
@@ -403,3 +460,18 @@ summary(final_data2)
 # https://stackoverflow.com/questions/30261435/r-clustering-silhouette-with-observation-labels
 # https://www.datanovia.com/en/lessons/highchart-interactive-world-map-in-r/
 
+
+###############################################################################################
+library(factoextra)
+# Kmeans using PCA
+new_data <- pc[["x"]]
+new_data <- new_data[,-c(4,56,7,8,9)]
+new_data <- new_data*100
+
+# Elbow Method
+set.seed(490)
+fviz_nbclust(new_data,kmeans,method = 'wss')
+
+# Silhouette Method
+k <- fviz_nbclust(new_data, kmeans, method = "silhouette")
+k
